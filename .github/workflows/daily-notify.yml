@@ -1,0 +1,36 @@
+name: daily-notify
+
+on:
+  schedule:
+    # 01:00 UTC = 08:00 Asia/Bangkok. GitHub cron may drift 5-15 min under load.
+    - cron: "0 1 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print message only, do not send"
+        type: boolean
+        default: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Send announcement
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_GROUP_ID: ${{ secrets.LINE_GROUP_ID }}
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          SHEET_WORKSHEET: schedule
+          SEND_WHEN_EMPTY: "1"
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python src/notify.py --dry-run
+          else
+            python src/notify.py
+          fi

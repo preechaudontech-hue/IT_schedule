@@ -1,0 +1,47 @@
+import os
+import sys
+from datetime import date
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+from notify import format_message, rows_for_day, thai_date  # noqa: E402
+
+
+ROWS = [
+    {"วันที่": "2026-09-11", "ชื่อ-สกุล": "นายสมชาย ใจดี", "รายการ/ภารกิจ": "ประชุม IT",
+     "เวลา": "13:00-15:00", "สถานที่": "ห้อง 2", "หมายเหตุ": "นำโน้ตบุ๊ก"},
+    {"วันที่": "2026-09-11", "ชื่อ-สกุล": "นางสาวมาลี", "รายการ/ภารกิจ": "ตรวจระบบเครือข่าย",
+     "เวลา": "09:00", "สถานที่": "", "หมายเหตุ": ""},
+    {"วันที่": "11/09/2026", "ชื่อ-สกุล": "นายเอก", "รายการ/ภารกิจ": "อบรม",
+     "เวลา": "", "สถานที่": "", "หมายเหตุ": ""},
+    {"วันที่": "2026-09-12", "ชื่อ-สกุล": "คนอื่น", "รายการ/ภารกิจ": "งานพรุ่งนี้",
+     "เวลา": "", "สถานที่": "", "หมายเหตุ": ""},
+]
+
+
+def test_thai_date():
+    assert thai_date(date(2026, 9, 11)) == "วันศุกร์ที่ 11 ก.ย. 2569"
+
+
+def test_rows_for_day_matches_multiple_date_formats():
+    got = rows_for_day(ROWS, date(2026, 9, 11))
+    assert len(got) == 3
+
+
+def test_format_message_sorts_by_time_and_includes_details():
+    msg = format_message(rows_for_day(ROWS, date(2026, 9, 11)), date(2026, 9, 11))
+    assert "ประจำวันศุกร์ที่ 11 ก.ย. 2569" in msg
+    # 09:00 entry should come before the 13:00 entry
+    assert msg.index("นางสาวมาลี") < msg.index("นายสมชาย ใจดี")
+    assert "@ ห้อง 2" in msg
+    assert "• นำโน้ตบุ๊ก" in msg
+
+
+def test_format_message_empty_default_sends_notice():
+    msg = format_message([], date(2026, 9, 11))
+    assert msg is not None
+    assert "ไม่มีกำหนดการ" in msg
+
+
+def test_format_message_empty_suppressed():
+    assert format_message([], date(2026, 9, 11), send_when_empty=False) is None

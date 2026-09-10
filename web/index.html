@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>แจ้งกำหนดการปฏิบัติงาน — แผนก IT</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <h1>📢 กำหนดการปฏิบัติงาน — แผนก IT</h1>
+    <p class="hint">กรอกรายการที่นี่ ระบบจะแจ้งเข้ากลุ่ม LINE อัตโนมัติทุกเช้า 08:00 น.</p>
+
+    <form id="form">
+      <div class="grid">
+        <label>วันที่ *<input type="date" name="date" required /></label>
+        <label>เวลา<input type="text" name="time" placeholder="09:00 หรือ 09:00-12:00" /></label>
+        <label>ชื่อ-สกุล *<input type="text" name="name" required autocomplete="name" /></label>
+        <label>สถานที่<input type="text" name="place" placeholder="ห้องประชุม 2" /></label>
+        <label class="wide">รายการ/ภารกิจ *<input type="text" name="task" required placeholder="ประชุมคณะกรรมการ IT" /></label>
+        <label class="wide">หมายเหตุ<input type="text" name="note" placeholder="นำโน้ตบุ๊ก" /></label>
+      </div>
+      <button type="submit" id="submitBtn">บันทึกรายการ</button>
+      <span id="msg" class="msg"></span>
+    </form>
+
+    <div class="toolbar">
+      <h2>รายการที่บันทึกไว้</h2>
+      <label class="chk"><input type="checkbox" id="showAll" /> ดูทั้งหมด (รวมที่ผ่านมาแล้ว)</label>
+    </div>
+    <div id="list" class="list">กำลังโหลด…</div>
+  </main>
+
+  <script>
+    // ── ใส่ URL ของ Apps Script Web App (ลงท้าย /exec) ที่ deploy แล้ว ──
+    const APPS_SCRIPT_URL = "PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE";
+    // ถ้าตั้ง PASSCODE ใน Code.gs ให้ใส่ตรงนี้ด้วย มิฉะนั้นปล่อยว่าง
+    const PASSCODE = "";
+
+    const $ = (s) => document.querySelector(s);
+    const form = $("#form");
+    const msg = $("#msg");
+    const listEl = $("#list");
+    const showAll = $("#showAll");
+
+    const TH_MONTHS = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+    const TH_DOW = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+
+    function thaiDate(iso) {
+      const [y, m, d] = iso.split("-").map(Number);
+      const dt = new Date(y, m - 1, d);
+      return `วัน${TH_DOW[dt.getDay()]}ที่ ${d} ${TH_MONTHS[m]} ${y + 543}`;
+    }
+    function todayISO() {
+      const n = new Date();
+      const bkk = new Date(n.getTime() + (n.getTimezoneOffset() + 420) * 60000);
+      return bkk.toISOString().slice(0, 10);
+    }
+
+    async function api(method, params, body) {
+      const url = new URL(APPS_SCRIPT_URL);
+      if (PASSCODE) url.searchParams.set("key", PASSCODE);
+      for (const k in (params || {})) url.searchParams.set(k, params[k]);
+      const opt = { method, redirect: "follow" };
+      if (body) {
+        // text/plain => "simple request", ไม่มี CORS preflight
+        opt.headers = { "Content-Type": "text/plain;charset=utf-8" };
+        opt.body = JSON.stringify(Object.assign({ key: PASSCODE }, body));
+      }
+      const res = await fetch(url, opt);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error || "เกิดข้อผิดพลาด");
+      return data;
+    }
+
+    function render(rows) {
+      if (!rows.length) { listEl.innerHTML = '<p class="empty">ยังไม่มีรายการ</p>'; return; }
+      const groups = {};
+      for (const r of rows) (groups[r.date] ||= []).push(r);
+      const html = Object.keys(groups).sort().map((date) => {
+        const items = groups[date].map((r) => `
+          <li>
+            <div class="it-main">
+              <span class="it-time">${escape_(r.time) || "—"}</span>
+              <span class="it-name">${escape_(r.name)}</span>
+            </div>
+            <div class="it-task">${escape_(r.task)}${r.place ? " @ " + escape_(r.place) : ""}</div>
+            ${r.note ? `<div class="it-note">• ${escape_(r.note)}</div>` : ""}
+            <button class="del" data-row="${r.row}" title="ลบ">🗑</button>
+          </li>`).join("");
+        return `<section class="day"><h3>${thaiDate(date)}</h3><ul>${items}</ul></section>`;
+      }).join("");
+      listEl.innerHTML = html;
+      listEl.querySelectorAll(".del").forEach((b) => b.onclick = () => del(b.dataset.row));
+    }
+
+    function escape_(s) {
+      return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    async function load() {
+      listEl.textContent = "กำลังโหลด…";
+      try {
+        const params = showAll.checked ? {} : { from: todayISO() };
+        const data = await api("GET", params);
+        render(data.rows);
+      } catch (e) {
+        listEl.innerHTML = `<p class="err">โหลดไม่สำเร็จ: ${escape_(e.message)}</p>`;
+      }
+    }
+
+    async function del(row) {
+      if (!confirm("ลบรายการนี้?")) return;
+      try {
+        await api("POST", null, { action: "delete", row: Number(row) });
+        load();
+      } catch (e) { alert("ลบไม่สำเร็จ: " + e.message); }
+    }
+
+    form.onsubmit = async (ev) => {
+      ev.preventDefault();
+      msg.textContent = ""; msg.className = "msg";
+      const fd = Object.fromEntries(new FormData(form).entries());
+      $("#submitBtn").disabled = true;
+      try {
+        await api("POST", null, Object.assign({ action: "add" }, fd));
+        msg.textContent = "✓ บันทึกแล้ว"; msg.className = "msg ok";
+        const keepName = fd.name;
+        form.reset();
+        form.querySelector('[name=name]').value = keepName;
+        load();
+      } catch (e) {
+        msg.textContent = "✗ " + e.message; msg.className = "msg err";
+      } finally {
+        $("#submitBtn").disabled = false;
+      }
+    };
+
+    showAll.onchange = load;
+    form.querySelector('[name=date]').value = todayISO();
+    if (APPS_SCRIPT_URL.startsWith("PASTE_")) {
+      listEl.innerHTML = '<p class="err">ยังไม่ได้ตั้งค่า APPS_SCRIPT_URL ในไฟล์ index.html</p>';
+    } else {
+      load();
+    }
+  </script>
+</body>
+</html>

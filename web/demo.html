@@ -1,0 +1,112 @@
+<title>ตัวอย่างระบบแจ้งเตือน แผนก IT</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--text:#1f2328;--muted:#6b7280;--border:#d9dde2;--accent:#06c755;--err:#d1242f}
+  @media (prefers-color-scheme:dark){:root{--bg:#0d1117;--card:#161b22;--text:#e6edf3;--muted:#9198a1;--border:#30363d;--err:#ff7b72}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","Sarabun",system-ui,sans-serif;line-height:1.5}
+  .wrap{max-width:900px;margin:0 auto;padding:20px 16px 60px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media (max-width:760px){.cols{grid-template-columns:1fr}}
+  h1{font-size:1.3rem;margin:6px 0 2px}
+  h2{font-size:1rem;margin:0 0 10px}
+  .hint{color:var(--muted);font-size:.88rem;margin:0 0 16px}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  label{display:flex;flex-direction:column;font-size:.8rem;color:var(--muted);gap:4px}
+  label.wide{grid-column:1/-1}
+  input{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 10px}
+  input:focus{outline:2px solid var(--accent)}
+  button{font:inherit;font-weight:600;cursor:pointer;margin-top:12px;background:var(--accent);color:#04331a;border:0;border-radius:8px;padding:10px 18px}
+  .msg{margin-left:10px;font-size:.85rem}
+  .msg.ok{color:var(--accent)} .msg.err{color:var(--err)}
+  .day h3{font-size:.9rem;margin:14px 0 6px;color:var(--accent)}
+  .day ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .day li{position:relative;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 38px 9px 11px}
+  .it-main{display:flex;gap:8px;align-items:baseline}
+  .it-time{font-weight:600;font-variant-numeric:tabular-nums}
+  .it-name{font-weight:600}
+  .it-task{font-size:.9rem} .it-note{font-size:.83rem;color:var(--muted)}
+  .del{position:absolute;top:7px;right:7px;margin:0;padding:3px 7px;background:transparent;color:var(--muted);font-size:.9rem}
+  .line-preview{background:#7ec97e22;border:1px dashed var(--accent);border-radius:12px;padding:14px;white-space:pre-wrap;font-size:.9rem;font-family:"Sarabun",system-ui,sans-serif}
+  .tag{display:inline-block;background:var(--accent);color:#04331a;font-size:.72rem;font-weight:700;border-radius:6px;padding:2px 8px;margin-bottom:8px}
+</style>
+<div class="wrap">
+  <h1>📢 ตัวอย่างระบบแจ้งเตือนการปฏิบัติงาน — แผนก IT</h1>
+  <p class="hint">เดโมนี้ทำงานในเบราว์เซอร์ล้วน ๆ (ข้อมูลไม่ถูกบันทึกจริง) — ลองเพิ่ม/ลบรายการ แล้วดูข้อความที่จะส่งเข้ากลุ่ม LINE ทางขวา</p>
+  <div class="cols">
+    <div>
+      <div class="panel">
+        <h2>กรอกรายการ</h2>
+        <form id="f">
+          <div class="grid">
+            <label>วันที่ *<input type="date" name="date" required></label>
+            <label>เวลา<input type="text" name="time" placeholder="09:00-12:00"></label>
+            <label>ชื่อ-สกุล *<input type="text" name="name" required></label>
+            <label>สถานที่<input type="text" name="place" placeholder="ห้องประชุม 2"></label>
+            <label class="wide">รายการ/ภารกิจ *<input type="text" name="task" required placeholder="ประชุมคณะกรรมการ IT"></label>
+            <label class="wide">หมายเหตุ<input type="text" name="note" placeholder="นำโน้ตบุ๊ก"></label>
+          </div>
+          <button type="submit">บันทึกรายการ</button><span id="m" class="msg"></span>
+        </form>
+      </div>
+      <div class="panel" style="margin-top:16px">
+        <h2>รายการที่บันทึกไว้</h2>
+        <div id="list"></div>
+      </div>
+    </div>
+    <div>
+      <div class="panel">
+        <h2>ข้อความที่บอทจะส่งเข้ากลุ่ม LINE</h2>
+        <span class="tag">ทุกวัน 08:00 น.</span>
+        <div id="prev" class="line-preview"></div>
+        <p class="hint" style="margin:10px 0 0">เลือกวันที่เพื่อดูตัวอย่างของวันนั้น:
+          <input type="date" id="pd" style="font:inherit;padding:4px 8px"></p>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const TH_M=["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+  const TH_D=["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์"];
+  const iso=d=>d.toISOString().slice(0,10);
+  const today=new Date(); const t0=iso(today);
+  const d1=iso(new Date(today.getTime()+86400000));
+  function thai(s){const[y,m,d]=s.split("-").map(Number);const dt=new Date(y,m-1,d);return`วัน${TH_D[dt.getDay()]}ที่ ${d} ${TH_M[m]} ${y+543}`}
+  function esc(s){return String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+  let rows=[
+    {id:1,date:t0,name:"นายสมชาย ใจดี",task:"ประชุมคณะกรรมการจัดหาระบบสารสนเทศ",time:"09:30-12:00",place:"ห้องประชุม 2",note:"นำโน้ตบุ๊ก + เอกสาร TOR"},
+    {id:2,date:t0,name:"นางสาวมาลี ตั้งมั่น",task:"ตรวจเช็คระบบเครือข่ายอาคาร B",time:"13:30",place:"ห้อง Server ชั้น 1",note:""},
+    {id:3,date:t0,name:"นายอนุชา รักงาน",task:"อบรมผู้ใช้งานระบบ e-Document รุ่นที่ 2",time:"10:00-16:00",place:"ห้องอบรมคอมพิวเตอร์",note:"ผู้เข้าอบรม 25 คน"},
+    {id:4,date:d1,name:"นายสมชาย ใจดี",task:"ติดตั้งเครื่องพิมพ์ใหม่ห้องการเงิน",time:"",place:"ชั้น 3",note:""}
+  ];
+  let seq=5;
+  const F=document.getElementById("f"),M=document.getElementById("m"),PD=document.getElementById("pd");
+  F.date.value=t0; PD.value=t0;
+  function render(){
+    const g={};rows.slice().sort((a,b)=>(a.date+(a.time||"99")).localeCompare(b.date+(b.time||"99"))).forEach(r=>(g[r.date]=g[r.date]||[]).push(r));
+    document.getElementById("list").innerHTML=Object.keys(g).sort().map(dt=>`<section class="day"><h3>${thai(dt)}</h3><ul>${
+      g[dt].map(r=>`<li><div class="it-main"><span class="it-time">${esc(r.time)||"—"}</span><span class="it-name">${esc(r.name)}</span></div>
+      <div class="it-task">${esc(r.task)}${r.place?" @ "+esc(r.place):""}</div>${r.note?`<div class="it-note">• ${esc(r.note)}</div>`:""}
+      <button class="del" data-id="${r.id}">🗑</button></li>`).join("")}</ul></section>`).join("");
+    document.querySelectorAll(".del").forEach(b=>b.onclick=()=>{rows=rows.filter(x=>x.id!=b.dataset.id);render()});
+    preview();
+  }
+  function preview(){
+    const d=PD.value;const items=rows.filter(r=>r.date===d).sort((a,b)=>(a.time||"99").localeCompare(b.time||"99"));
+    let txt=`📢 แจ้งกำหนดการปฏิบัติงาน ประจำ${thai(d)}\n`;
+    if(!items.length){txt+="\n— วันนี้ไม่มีกำหนดการที่บันทึกไว้\n";}
+    else items.forEach((r,i)=>{txt+=`\n${i+1}) ${r.time?r.time+" — ":""}${r.name}\n   ${r.task}${r.place?" @ "+r.place:""}\n`+(r.note?`   • ${r.note}\n`:"");});
+    txt+="\n— ระบบแจ้งเตือนอัตโนมัติ แผนก IT";
+    document.getElementById("prev").textContent=txt;
+  }
+  PD.onchange=preview;
+  F.onsubmit=e=>{
+    e.preventDefault();const fd=Object.fromEntries(new FormData(F));
+    if(!fd.date||!fd.name||!fd.task){M.textContent="✗ กรอกช่องที่มี * ให้ครบ";M.className="msg err";return;}
+    rows.push({id:seq++,...fd});
+    M.textContent="✓ บันทึกแล้ว";M.className="msg ok";
+    const n=fd.name;F.reset();F.date.value=fd.date;F.name.value=n;
+    render();
+  };
+  render();
+</script>
