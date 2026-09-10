@@ -117,6 +117,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true", help="print the message, do not send")
     ap.add_argument("--date", help="override target date (YYYY-MM-DD), for testing")
+    ap.add_argument("--debug", action="store_true", help="dump every row read from the sheet")
     args = ap.parse_args()
 
     target = _parse_date(args.date) if args.date else datetime.now(BKK_TZ).date()
@@ -133,6 +134,17 @@ def main() -> int:
         _env("SHEET_ID", required=True),
         _env("SHEET_WORKSHEET", "schedule"),
     )
+    if args.debug:
+        print(f"อ่านได้ {len(rows)} แถวจากแท็บ '{_env('SHEET_WORKSHEET', 'schedule')}'")
+        print(f"วันที่เป้าหมาย (วันนี้): {target}")
+        for i, row in enumerate(rows, start=1):
+            raw = _get(row, "date")
+            print(f"  [{i}] date_raw={raw!r} -> parsed={_parse_date(raw)} | "
+                  f"name={_get(row, 'name')!r} task={_get(row, 'task')!r}")
+            if i == 1:
+                print(f"      หัวคอลัมน์ที่เจอ: {list(row.keys())}")
+        print("-" * 40)
+
     todays = rows_for_day(rows, target)
     message = format_message(todays, target, send_when_empty)
 

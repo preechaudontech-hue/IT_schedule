@@ -30,7 +30,7 @@ jobs:
           SEND_WHEN_EMPTY: "1"
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            python src/notify.py --dry-run
+            python src/notify.py --dry-run --debug
           else
             python src/notify.py
           fi
