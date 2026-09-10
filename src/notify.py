@@ -51,8 +51,18 @@ def _get(row: dict[str, Any], key: str) -> str:
 
 
 def _parse_date(raw: str) -> date | None:
-    raw = raw.strip()
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+    raw = str(raw).strip()
+    if not raw:
+        return None
+    # Google may hand back a date cell as a serial number (days since 1899-12-30)
+    try:
+        n = float(raw)
+        if 1 < n < 200000:
+            return date(1899, 12, 30) + timedelta(days=int(n))
+    except ValueError:
+        pass
+    raw = raw.split("T")[0].split(" ")[0]  # drop any time part
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y", "%Y/%m/%d"):
         try:
             return datetime.strptime(raw, fmt).date()
         except ValueError:
