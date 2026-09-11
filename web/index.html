@@ -38,17 +38,17 @@
         <select id="placeSelect">
           <option value="">— เลือกสถานที่ —</option>
           <option>ห้องประชุมร่มประดู่ 1</option>
-          <option>ห้องประชุมร่มประดู่ 2</option>
+          <option>ห้องประชุมร่มประดู่ 2 (ข้างห้อง ผอ.)</option>
           <option>ห้องประชุมอินทนิล (อาคารพัสดุ)</option>
-          <option>ห้องโสตทัศน์</option>
-          <option value="__other__">อื่นๆ (พิมพ์เอง)</option>
+          <option>ห้องโสตทัศนศึกษา</option>
+          <option value="__other__">อื่นๆ (โปรดแจ้ง)</option>
         </select>
         <input type="text" id="placeOther" placeholder="ระบุสถานที่" hidden />
       </div>
 
       <div class="grid">
-        <label class="wide">รายการ/ภารกิจ *<input type="text" name="task" required placeholder="ประชุมคณะกรรมการ IT" /></label>
-        <label class="wide">หมายเหตุ<input type="text" name="note" placeholder="นำโน้ตบุ๊ก" /></label>
+        <label class="wide">รายการ/ภารกิจ *<input type="text" name="task" required value="ประชุม......" /></label>
+        <label class="wide">หมายเหตุ<input type="text" name="note" /></label>
       </div>
       <button type="submit" id="submitBtn">บันทึกรายการ</button>
       <span id="msg" class="msg"></span>
@@ -99,6 +99,9 @@
         if (allBox.checked) b.checked = false;
       });
     };
+
+    // ── ภารกิจ: เลือกข้อความคำร่างทั้งหมดตอนโฟกัส พิมพ์ทับได้ทันที ──
+    form.querySelector('[name=task]').addEventListener("focus", (e) => e.target.select());
 
     // ── สถานที่: เลือก "อื่นๆ" แล้วโชว์ช่องพิมพ์เอง ──
     placeSelect.onchange = () => {
@@ -168,10 +171,12 @@
       } catch (e) { alert("ลบไม่สำเร็จ: " + e.message); }
     }
 
+    const TASK_DEFAULT = "ประชุม......";
+
     function resetPartial() {
       // เคลียร์แค่ เวลา/ภารกิจ/หมายเหตุ — คงวันที่, ชื่อที่เลือก, สถานที่ไว้ (มักกรอกต่อเนื่อง)
       form.querySelector('[name=time]').value = "";
-      form.querySelector('[name=task]').value = "";
+      form.querySelector('[name=task]').value = TASK_DEFAULT;
       form.querySelector('[name=note]').value = "";
     }
 
