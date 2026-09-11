@@ -1,7 +1,8 @@
 """Daily work-schedule announcement to a LINE group.
 
-Reads a Google Sheet, filters rows for "today" (Asia/Bangkok), formats a Thai
-message and pushes it to a LINE group via the Messaging API.
+Reads a Google Sheet, keeps rows dated today (Asia/Bangkok) or later, formats
+a Thai message grouped by date and pushes it to a LINE group via the
+Messaging API.
 
 Env vars:
   LINE_CHANNEL_ACCESS_TOKEN  LINE Messaging API channel access token
@@ -71,9 +72,20 @@ def _parse_date(raw: str) -> date | None:
 
 
 def rows_for_day(rows: Iterable[dict[str, Any]], target: date) -> list[dict[str, Any]]:
+    """Rows dated exactly `target`."""
     out = []
     for row in rows:
         if _parse_date(_get(row, "date")) == target:
+            out.append(row)
+    return out
+
+
+def rows_from_day(rows: Iterable[dict[str, Any]], target: date) -> list[dict[str, Any]]:
+    """Rows dated `target` or any later date (undated rows are dropped)."""
+    out = []
+    for row in rows:
+        d = _parse_date(_get(row, "date"))
+        if d is not None and d >= target:
             out.append(row)
     return out
 
@@ -83,32 +95,45 @@ def _sort_key(row: dict[str, Any]) -> str:
     return t if t else "99:99"
 
 
+def _format_item(i: int, row: dict[str, Any]) -> list[str]:
+    name = _get(row, "name")
+    task = _get(row, "task")
+    tm = _get(row, "time")
+    place = _get(row, "place")
+    note = _get(row, "note")
+
+    head = f"{i}) "
+    head += f"{tm} — " if tm else ""
+    head += name or "(ไม่ระบุชื่อ)"
+    lines = [head]
+
+    detail = task or "(ไม่ระบุภารกิจ)"
+    if place:
+        detail += f" @ {place}"
+    lines.append(f"   {detail}")
+    if note:
+        lines.append(f"   • {note}")
+    return lines
+
+
 def format_message(rows: list[dict[str, Any]], target: date, send_when_empty: bool = True) -> str | None:
-    header = f"📢 แจ้งกำหนดการปฏิบัติงาน ประจำ{thai_date(target)}"
+    """Format rows dated `target` or later, grouped by date (today first)."""
+    header = f"📢 แจ้งกำหนดการปฏิบัติงาน ตั้งแต่{thai_date(target)}เป็นต้นไป"
     if not rows:
         if not send_when_empty:
             return None
-        return f"{header}\n\n— วันนี้ไม่มีกำหนดการที่บันทึกไว้\n\n— ระบบแจ้งเตือนอัตโนมัติ แผนก IT"
+        return f"{header}\n\n— ไม่มีกำหนดการที่บันทึกไว้\n\n— ระบบแจ้งเตือนอัตโนมัติ แผนก IT"
+
+    by_date: dict[date, list[dict[str, Any]]] = {}
+    for row in rows:
+        d = _parse_date(_get(row, "date"))
+        by_date.setdefault(d, []).append(row)
 
     lines = [header, ""]
-    for i, row in enumerate(sorted(rows, key=_sort_key), start=1):
-        name = _get(row, "name")
-        task = _get(row, "task")
-        tm = _get(row, "time")
-        place = _get(row, "place")
-        note = _get(row, "note")
-
-        head = f"{i}) "
-        head += f"{tm} — " if tm else ""
-        head += name or "(ไม่ระบุชื่อ)"
-        lines.append(head)
-
-        detail = task or "(ไม่ระบุภารกิจ)"
-        if place:
-            detail += f" @ {place}"
-        lines.append(f"   {detail}")
-        if note:
-            lines.append(f"   • {note}")
+    for d in sorted(by_date.keys()):
+        lines.append(f"📅 {thai_date(d)}")
+        for i, row in enumerate(sorted(by_date[d], key=_sort_key), start=1):
+            lines.extend(_format_item(i, row))
         lines.append("")
 
     lines.append("— ระบบแจ้งเตือนอัตโนมัติ แผนก IT")
@@ -155,8 +180,8 @@ def main() -> int:
                 print(f"      หัวคอลัมน์ที่เจอ: {list(row.keys())}")
         print("-" * 40)
 
-    todays = rows_for_day(rows, target)
-    message = format_message(todays, target, send_when_empty)
+    upcoming = rows_from_day(rows, target)
+    message = format_message(upcoming, target, send_when_empty)
 
     if message is None:
         print("Nothing scheduled and SEND_WHEN_EMPTY=0 — not sending.")
@@ -173,7 +198,7 @@ def main() -> int:
         _env("LINE_GROUP_ID", required=True),
         message,
     )
-    print(f"Sent {len(todays)} item(s) for {target}.")
+    print(f"Sent {len(upcoming)} item(s) from {target} onward.")
     return 0
 
 
