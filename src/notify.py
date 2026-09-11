@@ -16,9 +16,12 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from datetime import date, datetime, timezone, timedelta
 from typing import Any, Iterable
+
+AFTERNOON_CUTOFF_HOUR = 12
 
 BKK_TZ = timezone(timedelta(hours=7))
 
@@ -95,6 +98,43 @@ def _sort_key(row: dict[str, Any]) -> str:
     return t if t else "99:99"
 
 
+def _start_hour(row: dict[str, Any]) -> int | None:
+    """Best-effort hour the row's time starts at, e.g. '13.00 น.' -> 13."""
+    m = re.search(r"(\d{1,2})[:.]\d{2}", _get(row, "time"))
+    if not m:
+        return None
+    h = int(m.group(1))
+    return h if 0 <= h <= 23 else None
+
+
+def afternoon_rows(rows: Iterable[dict[str, Any]], target: date) -> list[dict[str, Any]]:
+    """Today's rows whose time starts at/after AFTERNOON_CUTOFF_HOUR.
+
+    Rows with no parseable time are excluded — they were already covered by
+    the morning announcement, so the noon reminder only repeats items that
+    are clearly scheduled for the afternoon.
+    """
+    out = []
+    for row in rows_for_day(rows, target):
+        h = _start_hour(row)
+        if h is not None and h >= AFTERNOON_CUTOFF_HOUR:
+            out.append(row)
+    return out
+
+
+def format_afternoon_message(rows: list[dict[str, Any]], target: date) -> str | None:
+    """Same-day, afternoon-only reminder. Returns None when there's nothing
+    to say — the caller should skip sending entirely in that case."""
+    if not rows:
+        return None
+    lines = [f"🔔 เตือนภารกิจช่วงบ่าย ประจำ{thai_date(target)}", ""]
+    for i, row in enumerate(sorted(rows, key=_sort_key), start=1):
+        lines.extend(_format_item(i, row))
+    lines.append("")
+    lines.append("— ระบบแจ้งเตือนอัตโนมัติ แผนก IT")
+    return "\n".join(lines)
+
+
 def _format_item(i: int, row: dict[str, Any]) -> list[str]:
     name = _get(row, "name")
     task = _get(row, "task")
@@ -153,6 +193,11 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="print the message, do not send")
     ap.add_argument("--date", help="override target date (YYYY-MM-DD), for testing")
     ap.add_argument("--debug", action="store_true", help="dump every row read from the sheet")
+    ap.add_argument(
+        "--session", choices=["morning", "afternoon"], default="morning",
+        help="morning: today + upcoming days (always sends). "
+             "afternoon: today's afternoon items only, skipped entirely if none.",
+    )
     args = ap.parse_args()
 
     target = _parse_date(args.date) if args.date else datetime.now(BKK_TZ).date()
@@ -180,12 +225,20 @@ def main() -> int:
                 print(f"      หัวคอลัมน์ที่เจอ: {list(row.keys())}")
         print("-" * 40)
 
-    upcoming = rows_from_day(rows, target)
-    message = format_message(upcoming, target, send_when_empty)
-
-    if message is None:
-        print("Nothing scheduled and SEND_WHEN_EMPTY=0 — not sending.")
-        return 0
+    if args.session == "afternoon":
+        selected = afternoon_rows(rows, target)
+        message = format_afternoon_message(selected, target)
+        if message is None:
+            print("ไม่มีภารกิจช่วงบ่ายวันนี้ — ข้ามรอบนี้ ไม่ส่ง")
+            return 0
+        label = f"afternoon item(s) for {target}"
+    else:
+        selected = rows_from_day(rows, target)
+        message = format_message(selected, target, send_when_empty)
+        if message is None:
+            print("Nothing scheduled and SEND_WHEN_EMPTY=0 — not sending.")
+            return 0
+        label = f"item(s) from {target} onward"
 
     if args.dry_run:
         print(message)
@@ -198,7 +251,7 @@ def main() -> int:
         _env("LINE_GROUP_ID", required=True),
         message,
     )
-    print(f"Sent {len(upcoming)} item(s) from {target} onward.")
+    print(f"Sent {len(selected)} {label}.")
     return 0
 
 

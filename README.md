@@ -1,10 +1,13 @@
-# ระบบแจ้งเตือนการปฏิบัติงานผ่านกลุ่ม LINE (ทุกวัน 08:00)
+# ระบบแจ้งเตือนการปฏิบัติงานผ่านกลุ่ม LINE (วันละ 2 รอบ)
 
-ทุกเช้า GitHub Actions จะรัน `src/notify.py` → อ่านตารางงานจาก Google Sheet →
-กรองงานของ "วันนี้" → ส่งข้อความสรุปเข้ากลุ่ม LINE ผ่าน Messaging API
+GitHub Actions รัน `src/notify.py` → อ่านตารางงานจาก Google Sheet → ส่งข้อความสรุปเข้ากลุ่ม LINE
+ผ่าน Messaging API วันละ 2 รอบ:
+
+- **08:00 น. (เช้า)** — สรุปภารกิจตั้งแต่วันนี้เป็นต้นไป (วันนี้ + วันถัดไปทั้งหมด) **ส่งทุกวัน** แม้ไม่มีงาน
+- **11:30 น. (เที่ยง)** — เตือนเฉพาะภารกิจ**ช่วงบ่ายของวันนี้** (เวลา ≥ 12:00) **ถ้าไม่มีภารกิจบ่าย จะไม่ส่งข้อความเลย**
 
 ```
-Google Sheet  ──►  GitHub Actions (cron 01:00 UTC = 08:00 ไทย)  ──►  LINE push  ──►  กลุ่ม
+Google Sheet  ──►  GitHub Actions (cron 01:00 & 04:30 UTC = 08:00 & 11:30 ไทย)  ──►  LINE push  ──►  กลุ่ม
 ```
 
 ## 1. เตรียม Google Sheet
@@ -47,11 +50,12 @@ Repo → Settings → Secrets and variables → Actions → New repository secre
 ## 5. ทดสอบ
 ```bash
 pip install -r requirements.txt
-python -m pytest -q                 # ตรวจ logic จัดข้อความ/กรองวันที่
-python src/notify.py --dry-run      # ต้องตั้ง env ก่อน (ดู .env.example) — พิมพ์ข้อความ ไม่ส่ง
+python -m pytest -q                                   # ตรวจ logic จัดข้อความ/กรองวันที่
+python src/notify.py --dry-run                         # รอบเช้า (ต้องตั้ง env ก่อน ดู .env.example)
+python src/notify.py --session afternoon --dry-run     # รอบเที่ยง (ไม่มีงานบ่าย = ไม่พิมพ์อะไรเลย)
 python src/notify.py --date 2026-09-11 --dry-run
 ```
-บน GitHub: แท็บ **Actions → daily-notify → Run workflow** (ติ๊ก dry run ได้) เพื่อเช็คว่า secrets ครบ
+บน GitHub: แท็บ **Actions → daily-notify → Run workflow** เลือก **session** (morning/afternoon) และติ๊ก dry run ได้ เพื่อเช็คว่า secrets ครบ
 
 ## หน้าเว็บกรอกข้อมูล
 แทนการแก้ Google Sheet ตรง ๆ มีหน้าเว็บให้กรอก/ดู/ลบรายการ (`web/index.html`)
@@ -66,6 +70,8 @@ python src/notify.py --date 2026-09-11 --dry-run
 > ให้ตั้ง `PASSCODE` ทั้งใน `apps_script/Code.gs` และ `web/index.html`
 
 ## ปรับแต่ง
-- ไม่อยากส่งวันที่ไม่มีงาน: ตั้ง secret/`env` `SEND_WHEN_EMPTY=0`
-- เปลี่ยนเวลา: แก้ `cron` ใน `.github/workflows/daily-notify.yml` (เป็น UTC — ไทยลบ 7)
-- GitHub cron ดีเลย์ได้ 5–15 นาที ถ้าต้องเป๊ะให้ย้ายไป VPS + crontab เรียก `python src/notify.py`
+- ไม่อยากส่งวันที่ไม่มีงาน (รอบเช้า): ตั้ง secret/`env` `SEND_WHEN_EMPTY=0`
+- รอบบ่ายถือว่า "บ่าย" ตั้งแต่ชั่วโมงไหน: แก้ `AFTERNOON_CUTOFF_HOUR` ใน `src/notify.py` (ค่าเริ่มต้น 12)
+- เปลี่ยนเวลาส่ง: แก้ `cron` ใน `.github/workflows/daily-notify.yml` (เป็น UTC — ไทยลบ 7)
+- GitHub cron ดีเลย์ได้ 5–15 นาที ถ้าต้องเป๊ะให้ย้ายไป VPS + crontab เรียก `python src/notify.py --session morning`
+  และ `python src/notify.py --session afternoon` ตามเวลาที่ต้องการ

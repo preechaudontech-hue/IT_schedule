@@ -4,7 +4,14 @@ from datetime import date
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from notify import format_message, rows_for_day, rows_from_day, thai_date  # noqa: E402
+from notify import (  # noqa: E402
+    afternoon_rows,
+    format_afternoon_message,
+    format_message,
+    rows_for_day,
+    rows_from_day,
+    thai_date,
+)
 
 
 ROWS = [
@@ -58,3 +65,34 @@ def test_format_message_empty_default_sends_notice():
 
 def test_format_message_empty_suppressed():
     assert format_message([], date(2026, 9, 11), send_when_empty=False) is None
+
+
+AFTERNOON_ROWS = [
+    {"วันที่": "2026-09-11", "ชื่อ-สกุล": "เช้า", "รายการ/ภารกิจ": "ประชุมเช้า",
+     "เวลา": "09.00 น.", "สถานที่": "", "หมายเหตุ": ""},
+    {"วันที่": "2026-09-11", "ชื่อ-สกุล": "บ่าย", "รายการ/ภารกิจ": "ตรวจงานบ่าย",
+     "เวลา": "13.00 น.", "สถานที่": "", "หมายเหตุ": ""},
+    {"วันที่": "2026-09-11", "ชื่อ-สกุล": "ไม่ระบุเวลา", "รายการ/ภารกิจ": "งานไม่ระบุเวลา",
+     "เวลา": "", "สถานที่": "", "หมายเหตุ": ""},
+    {"วันที่": "2026-09-12", "ชื่อ-สกุล": "พรุ่งนี้บ่าย", "รายการ/ภารกิจ": "งานพรุ่งนี้",
+     "เวลา": "14.00 น.", "สถานที่": "", "หมายเหตุ": ""},
+]
+
+
+def test_afternoon_rows_only_todays_afternoon_items():
+    got = afternoon_rows(AFTERNOON_ROWS, date(2026, 9, 11))
+    assert [r["ชื่อ-สกุล"] for r in got] == ["บ่าย"]
+
+
+def test_format_afternoon_message_none_when_empty():
+    assert format_afternoon_message([], date(2026, 9, 11)) is None
+    # 9/13 has no rows at all -> no afternoon items either
+    assert format_afternoon_message(afternoon_rows(AFTERNOON_ROWS, date(2026, 9, 13)), date(2026, 9, 13)) is None
+
+
+def test_format_afternoon_message_lists_items():
+    rows = afternoon_rows(AFTERNOON_ROWS, date(2026, 9, 11))
+    msg = format_afternoon_message(rows, date(2026, 9, 11))
+    assert "เตือนภารกิจช่วงบ่าย" in msg
+    assert "ตรวจงานบ่าย" in msg
+    assert "ประชุมเช้า" not in msg

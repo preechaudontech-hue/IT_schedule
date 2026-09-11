@@ -2,10 +2,18 @@ name: daily-notify
 
 on:
   schedule:
-    # 01:00 UTC = 08:00 Asia/Bangkok. GitHub cron may drift 5-15 min under load.
+    # 01:00 UTC = 08:00 Asia/Bangkok — full announcement (today + upcoming days)
     - cron: "0 1 * * *"
+    # 04:30 UTC = 11:30 Asia/Bangkok — afternoon-only reminder, skipped if none
+    - cron: "30 4 * * *"
+    # GitHub cron may drift 5-15 min under load.
   workflow_dispatch:
     inputs:
+      session:
+        description: "Which announcement to send"
+        type: choice
+        options: [morning, afternoon]
+        default: morning
       dry_run:
         description: "Print message only, do not send"
         type: boolean
@@ -20,6 +28,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      - name: Pick session for this run
+        id: pick
+        run: |
+          if [ -n "${{ inputs.session }}" ]; then
+            echo "session=${{ inputs.session }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "30 4 * * *" ]; then
+            echo "session=afternoon" >> "$GITHUB_OUTPUT"
+          else
+            echo "session=morning" >> "$GITHUB_OUTPUT"
+          fi
       - name: Send announcement
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
@@ -30,7 +48,7 @@ jobs:
           SEND_WHEN_EMPTY: "1"
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            python src/notify.py --dry-run --debug
+            python src/notify.py --session ${{ steps.pick.outputs.session }} --dry-run --debug
           else
-            python src/notify.py
+            python src/notify.py --session ${{ steps.pick.outputs.session }}
           fi
