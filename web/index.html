@@ -14,9 +14,39 @@
     <form id="form">
       <div class="grid">
         <label>วันที่ *<input type="date" name="date" required /></label>
-        <label>เวลา<input type="text" name="time" placeholder="09:00 หรือ 09:00-12:00" /></label>
-        <label>ชื่อ-สกุล *<input type="text" name="name" required autocomplete="name" /></label>
-        <label>สถานที่<input type="text" name="place" placeholder="ห้องประชุม 2" /></label>
+        <label>เวลา<input type="time" name="time" /></label>
+      </div>
+
+      <div class="field-block">
+        <span class="field-label">ชื่อ-สกุล *</span>
+        <div class="chk-group" id="nameChecks">
+          <label class="chk-item"><input type="checkbox" value="ทุกคน" data-all /> ทุกคน</label>
+          <label class="chk-item"><input type="checkbox" value="อ.วิชัย" /> อ.วิชัย</label>
+          <label class="chk-item"><input type="checkbox" value="อ.รุ่งนภา" /> อ.รุ่งนภา</label>
+          <label class="chk-item"><input type="checkbox" value="อ.ศักดิ์สิทธิ์" /> อ.ศักดิ์สิทธิ์</label>
+          <label class="chk-item"><input type="checkbox" value="อ.อุสาห์" /> อ.อุสาห์</label>
+          <label class="chk-item"><input type="checkbox" value="อ.ปรีชา" /> อ.ปรีชา</label>
+          <label class="chk-item"><input type="checkbox" value="อ.ณัฐพล" /> อ.ณัฐพล</label>
+          <label class="chk-item"><input type="checkbox" value="อ.กฤชรัช" /> อ.กฤชรัช</label>
+          <label class="chk-item"><input type="checkbox" value="อ.นัฎวัสส์" /> อ.นัฎวัสส์</label>
+          <label class="chk-item"><input type="checkbox" value="น้องต้นกล้า" /> น้องต้นกล้า</label>
+        </div>
+      </div>
+
+      <div class="field-block">
+        <span class="field-label">สถานที่</span>
+        <select id="placeSelect">
+          <option value="">— เลือกสถานที่ —</option>
+          <option>ห้องประชุมร่มประดู่ 1</option>
+          <option>ห้องประชุมร่มประดู่ 2</option>
+          <option>ห้องประชุมอินทนิล (อาคารพัสดุ)</option>
+          <option>ห้องโสตทัศน์</option>
+          <option value="__other__">อื่นๆ (พิมพ์เอง)</option>
+        </select>
+        <input type="text" id="placeOther" placeholder="ระบุสถานที่" hidden />
+      </div>
+
+      <div class="grid">
         <label class="wide">รายการ/ภารกิจ *<input type="text" name="task" required placeholder="ประชุมคณะกรรมการ IT" /></label>
         <label class="wide">หมายเหตุ<input type="text" name="note" placeholder="นำโน้ตบุ๊ก" /></label>
       </div>
@@ -42,6 +72,11 @@
     const msg = $("#msg");
     const listEl = $("#list");
     const showAll = $("#showAll");
+    const placeSelect = $("#placeSelect");
+    const placeOther = $("#placeOther");
+    const nameBoxes = [...document.querySelectorAll("#nameChecks input[type=checkbox]")];
+    const allBox = nameBoxes.find((b) => b.dataset.all !== undefined);
+    const personBoxes = nameBoxes.filter((b) => b !== allBox);
 
     const TH_MONTHS = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
     const TH_DOW = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
@@ -56,6 +91,22 @@
       const bkk = new Date(n.getTime() + (n.getTimezoneOffset() + 420) * 60000);
       return bkk.toISOString().slice(0, 10);
     }
+
+    // ── ทุกคน ⇄ รายชื่อทีละคน: เลือก "ทุกคน" แล้วปิดการเลือกทีละคน ──
+    allBox.onchange = () => {
+      personBoxes.forEach((b) => {
+        b.disabled = allBox.checked;
+        if (allBox.checked) b.checked = false;
+      });
+    };
+
+    // ── สถานที่: เลือก "อื่นๆ" แล้วโชว์ช่องพิมพ์เอง ──
+    placeSelect.onchange = () => {
+      const isOther = placeSelect.value === "__other__";
+      placeOther.hidden = !isOther;
+      if (isOther) placeOther.focus();
+      else placeOther.value = "";
+    };
 
     async function api(method, params, body) {
       const url = new URL(APPS_SCRIPT_URL);
@@ -117,17 +168,35 @@
       } catch (e) { alert("ลบไม่สำเร็จ: " + e.message); }
     }
 
+    function resetPartial() {
+      // เคลียร์แค่ เวลา/ภารกิจ/หมายเหตุ — คงวันที่, ชื่อที่เลือก, สถานที่ไว้ (มักกรอกต่อเนื่อง)
+      form.querySelector('[name=time]').value = "";
+      form.querySelector('[name=task]').value = "";
+      form.querySelector('[name=note]').value = "";
+    }
+
     form.onsubmit = async (ev) => {
       ev.preventDefault();
       msg.textContent = ""; msg.className = "msg";
+
+      const chosenNames = allBox.checked ? ["ทุกคน"] : personBoxes.filter((b) => b.checked).map((b) => b.value);
+      if (!chosenNames.length) {
+        msg.textContent = "✗ กรุณาเลือกชื่ออย่างน้อย 1 คน"; msg.className = "msg err";
+        return;
+      }
+
+      let place = placeSelect.value;
+      if (place === "__other__") place = placeOther.value.trim();
+
       const fd = Object.fromEntries(new FormData(form).entries());
+      fd.name = chosenNames.join(", ");
+      fd.place = place;
+
       $("#submitBtn").disabled = true;
       try {
         await api("POST", null, Object.assign({ action: "add" }, fd));
         msg.textContent = "✓ บันทึกแล้ว"; msg.className = "msg ok";
-        const keepName = fd.name;
-        form.reset();
-        form.querySelector('[name=name]').value = keepName;
+        resetPartial();
         load();
       } catch (e) {
         msg.textContent = "✗ " + e.message; msg.className = "msg err";
