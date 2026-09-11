@@ -90,10 +90,22 @@ function _checkKey(provided) {
 
 function doGet(e) {
   try {
-    _checkKey(e && e.parameter && e.parameter.key);
+    var p = (e && e.parameter) || {};
+    // Debug helper: open <url>?debug=groupid in a browser to see the last
+    // group/room id this Web App has seen come through the LINE webhook.
+    if (p.debug === 'groupid') {
+      var props = PropertiesService.getScriptProperties();
+      return _json({
+        ok: true,
+        lastGroupId: props.getProperty('LAST_GROUP_ID') || null,
+        lastSeenAt: props.getProperty('LAST_GROUP_ID_AT') || null,
+        note: 'ส่งข้อความอะไรก็ได้ในกลุ่ม LINE ที่เชิญบอทเข้าไปแล้ว รีเฟรชหน้านี้เพื่อดูค่าล่าสุด',
+      });
+    }
+    _checkKey(p.key);
     var data = _readRows();
     var rows = data.rows;
-    var from = e && e.parameter && e.parameter.from;
+    var from = p.from;
     if (from) rows = rows.filter(function (x) { return x.date >= from; });
     rows.sort(function (a, b) {
       return (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99'));
@@ -108,6 +120,15 @@ function doPost(e) {
   try {
     var body = {};
     if (e && e.postData && e.postData.contents) body = JSON.parse(e.postData.contents);
+
+    // LINE webhook calls land here with an "events" array (no "action" of ours).
+    // Use this same Web App URL as the LINE Messaging API webhook to capture
+    // the group/room id without needing any tunnel (ngrok/cloudflared).
+    if (body && body.events) {
+      _recordLineEvents(body.events);
+      return ContentService.createTextOutput('OK');
+    }
+
     _checkKey(body.key);
     var action = body.action;
 
@@ -120,6 +141,18 @@ function doPost(e) {
   } catch (err) {
     return _json({ ok: false, error: String(err.message || err) });
   }
+}
+
+function _recordLineEvents(events) {
+  var props = PropertiesService.getScriptProperties();
+  events.forEach(function (ev) {
+    var src = ev.source || {};
+    var id = src.groupId || src.roomId;
+    if (id) {
+      props.setProperty('LAST_GROUP_ID', id);
+      props.setProperty('LAST_GROUP_ID_AT', new Date().toISOString());
+    }
+  });
 }
 
 function _add(body) {

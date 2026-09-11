@@ -28,6 +28,27 @@
 ใน `Code.gs` ตั้ง `var PASSCODE = 'ค่าอะไรก็ได้';` แล้ว deploy เวอร์ชันใหม่
 จากนั้นใส่ค่าเดียวกันใน `web/index.html` ที่ `const PASSCODE = "...";`
 
+## หา LINE Group ID (ไม่ต้องใช้ tunnel/ngrok)
+Web app URL ตัวนี้เป็น public HTTPS อยู่แล้ว ใช้เป็น LINE webhook ได้เลย:
+
+1. คัดลอก Web app URL (ตัวเดียวกับที่ใช้ใน `web/index.html`)
+2. developers.line.biz → channel ของคุณ → แท็บ **Messaging API**
+3. ช่อง **Webhook URL** → วาง URL นั้น → กด **Update**
+4. เปิด **Use webhook** = Enabled
+5. กด **Verify** (ควรขึ้น Success — ถ้าไม่สำเร็จดูหัวข้อ "แก้ปัญหา" ด้านล่าง)
+6. ให้บอทเข้ากลุ่ม LINE (ถ้ายัง) → พิมพ์ข้อความอะไรก็ได้ในกลุ่ม 1 ครั้ง
+7. เปิด `<Web app URL>?debug=groupid` ในเบราว์เซอร์ → จะเห็น
+   ```json
+   {"ok":true,"lastGroupId":"Cxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", ...}
+   ```
+8. คัดลอกค่า `Cxxxx...` → ใส่ GitHub Secret ชื่อ `LINE_GROUP_ID`
+9. (แนะนำ) กลับไปปิด **Use webhook** เป็น Disabled อีกครั้งหลังได้ id แล้ว — เพราะระบบนี้ส่งข้อความแบบ push ไม่ได้ใช้ webhook ตอนทำงานจริง
+
+### แก้ปัญหา
+- **Verify ไม่ผ่าน**: ต้อง deploy เวอร์ชันใหม่ก่อน (Deploy → Manage deployments → ดินสอ → New version → Deploy) เพราะ URL เดิมยังรันโค้ดเก่าที่ไม่รู้จัก `events`
+- **`lastGroupId` เป็น null**: บอทอาจยังไม่ได้อยู่ในกลุ่มจริง หรือยังไม่ได้พิมพ์ข้อความหลังเปิด webhook — เชิญบอทใหม่แล้วพิมพ์อีกครั้ง
+- **ตั้ง PASSCODE ไว้**: debug endpoint นี้ไม่เช็ค PASSCODE (เพื่อความง่าย) — ปิด webhook ทันทีหลังใช้เสร็จ
+
 ## ทดสอบเร็ว ๆ
 - เปิด Web app URL ตรง ๆ ในเบราว์เซอร์ → ควรเห็น `{"ok":true,"rows":[...]}`
 - เพิ่มแถว:
