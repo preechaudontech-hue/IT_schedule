@@ -29,7 +29,7 @@ ROWS = [
 
 
 def test_thai_date():
-    assert thai_date(date(2026, 9, 11)) == "วันศุกร์ที่ 11 ก.ย. 2569"
+    assert thai_date(date(2026, 9, 11)) == "วันศุกร์ที่ 11 ก.ย. 69"
 
 
 def test_rows_for_day_matches_multiple_date_formats():
@@ -45,15 +45,17 @@ def test_rows_from_day_includes_today_and_future_only():
 
 def test_format_message_groups_by_date_and_sorts_by_time():
     msg = format_message(rows_from_day(ROWS, date(2026, 9, 11)), date(2026, 9, 11))
-    assert "ตั้งแต่วันศุกร์ที่ 11 ก.ย. 2569เป็นต้นไป" in msg
-    assert "📅 วันศุกร์ที่ 11 ก.ย. 2569" in msg
-    assert "📅 วันเสาร์ที่ 12 ก.ย. 2569" in msg
+    assert "📢 แจ้งกำหนดการปฏิบัติงาน\nวันศุกร์ที่ 11 ก.ย. 69เป็นต้นไป" in msg
+    assert "📅 วันศุกร์ที่ 11 ก.ย. 69" in msg
+    assert "📅 วันเสาร์ที่ 12 ก.ย. 69" in msg
     # today's section comes before tomorrow's
     assert msg.index("วันศุกร์ที่ 11") < msg.index("วันเสาร์ที่ 12")
     # 09:00 entry should come before the 13:00 entry within the same day
     assert msg.index("นางสาวมาลี") < msg.index("นายสมชาย ใจดี")
-    assert "@ ห้อง 2" in msg
-    assert "• นำโน้ตบุ๊ก" in msg
+    assert "1) 09:00" in msg
+    assert "   - นางสาวมาลี" in msg
+    assert "   - ห้อง 2" in msg
+    assert "   - นำโน้ตบุ๊ก" in msg
     assert "งานที่ผ่านมาแล้ว" not in msg
 
 

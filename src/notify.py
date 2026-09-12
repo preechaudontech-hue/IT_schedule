@@ -43,7 +43,8 @@ _COLS = {
 
 
 def thai_date(d: date) -> str:
-    return f"วัน{_TH_WEEKDAYS[d.weekday()]}ที่ {d.day} {_TH_MONTHS[d.month]} {d.year + 543}"
+    yy = (d.year + 543) % 100  # 2-digit Buddhist year, e.g. 2026 -> 69
+    return f"วัน{_TH_WEEKDAYS[d.weekday()]}ที่ {d.day} {_TH_MONTHS[d.month]} {yy:02d}"
 
 
 def _get(row: dict[str, Any], key: str) -> str:
@@ -136,29 +137,27 @@ def format_afternoon_message(rows: list[dict[str, Any]], target: date) -> str | 
 
 
 def _format_item(i: int, row: dict[str, Any]) -> list[str]:
+    """One schedule item as a numbered head (time only) plus dash-bulleted
+    name / task / place / note lines — no time end is required, an item with
+    only a start time (or no time at all) still formats cleanly."""
     name = _get(row, "name")
     task = _get(row, "task")
     tm = _get(row, "time")
     place = _get(row, "place")
     note = _get(row, "note")
 
-    head = f"{i}) "
-    head += f"{tm} — " if tm else ""
-    head += name or "(ไม่ระบุชื่อ)"
-    lines = [head]
-
-    detail = task or "(ไม่ระบุภารกิจ)"
+    head = f"{i}) {tm}" if tm else f"{i})"
+    lines = [head, f"   - {name or '(ไม่ระบุชื่อ)'}", f"   - {task or '(ไม่ระบุภารกิจ)'}"]
     if place:
-        detail += f" @ {place}"
-    lines.append(f"   {detail}")
+        lines.append(f"   - {place}")
     if note:
-        lines.append(f"   • {note}")
+        lines.append(f"   - {note}")
     return lines
 
 
 def format_message(rows: list[dict[str, Any]], target: date, send_when_empty: bool = True) -> str | None:
     """Format rows dated `target` or later, grouped by date (today first)."""
-    header = f"📢 แจ้งกำหนดการปฏิบัติงาน ตั้งแต่{thai_date(target)}เป็นต้นไป"
+    header = f"📢 แจ้งกำหนดการปฏิบัติงาน\n{thai_date(target)}เป็นต้นไป"
     if not rows:
         if not send_when_empty:
             return None
