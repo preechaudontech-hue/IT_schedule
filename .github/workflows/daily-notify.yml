@@ -6,7 +6,8 @@ on:
     - cron: "0 1 * * *"
     # 04:30 UTC = 11:30 Asia/Bangkok — afternoon-only reminder, skipped if none
     - cron: "30 4 * * *"
-    # GitHub cron may drift 5-15 min under load.
+    # Note: GitHub cron may drift 5-15 min under load, and occasionally
+    # needs a fresh push to this file to re-register after repeated edits.
   workflow_dispatch:
     inputs:
       session:
