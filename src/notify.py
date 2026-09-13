@@ -132,7 +132,7 @@ def format_afternoon_message(rows: list[dict[str, Any]], target: date) -> str | 
     for i, row in enumerate(sorted(rows, key=_sort_key), start=1):
         lines.extend(_format_item(i, row))
     lines.append("")
-    lines.append("— ระบบแจ้งเตือนอัตโนมัติ แผนก IT")
+    lines.append("— Bot แจ้งเตือน")
     return "\n".join(lines)
 
 
@@ -161,7 +161,7 @@ def format_message(rows: list[dict[str, Any]], target: date, send_when_empty: bo
     if not rows:
         if not send_when_empty:
             return None
-        return f"{header}\n\n— ไม่มีกำหนดการที่บันทึกไว้\n\n— ระบบแจ้งเตือนอัตโนมัติ แผนก IT"
+        return f"{header}\n\n— ไม่มีกำหนดการที่บันทึกไว้\n\n— Bot แจ้งเตือน"
 
     by_date: dict[date, list[dict[str, Any]]] = {}
     for row in rows:
@@ -175,7 +175,7 @@ def format_message(rows: list[dict[str, Any]], target: date, send_when_empty: bo
             lines.extend(_format_item(i, row))
         lines.append("")
 
-    lines.append("— ระบบแจ้งเตือนอัตโนมัติ แผนก IT")
+    lines.append("— Bot แจ้งเตือน")
     return "\n".join(lines)
 
 

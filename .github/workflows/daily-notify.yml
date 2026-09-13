@@ -46,7 +46,7 @@ jobs:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
           SHEET_WORKSHEET: schedule
-          SEND_WHEN_EMPTY: "1"
+          SEND_WHEN_EMPTY: "0"
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             python src/notify.py --session ${{ steps.pick.outputs.session }} --dry-run --debug

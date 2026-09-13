@@ -70,7 +70,8 @@ python src/notify.py --date 2026-09-11 --dry-run
 > ให้ตั้ง `PASSCODE` ทั้งใน `apps_script/Code.gs` และ `web/index.html`
 
 ## ปรับแต่ง
-- ไม่อยากส่งวันที่ไม่มีงาน (รอบเช้า): ตั้ง secret/`env` `SEND_WHEN_EMPTY=0`
+- ค่าเริ่มต้น (รอบเช้า) คือ `SEND_WHEN_EMPTY=0` — วันไหนไม่มีงานเลย (เช่น เสาร์-อาทิตย์) จะไม่ส่งข้อความเลย
+  ถ้าอยากให้ส่งข้อความ "ไม่มีกำหนดการ" ทุกวันแทน ให้แก้ `env` ใน `.github/workflows/daily-notify.yml` เป็น `SEND_WHEN_EMPTY: "1"`
 - รอบบ่ายถือว่า "บ่าย" ตั้งแต่ชั่วโมงไหน: แก้ `AFTERNOON_CUTOFF_HOUR` ใน `src/notify.py` (ค่าเริ่มต้น 12)
 - เปลี่ยนเวลาส่ง: แก้ `cron` ใน `.github/workflows/daily-notify.yml` (เป็น UTC — ไทยลบ 7)
 - GitHub cron ดีเลย์ได้ 5–15 นาที ถ้าต้องเป๊ะให้ย้ายไป VPS + crontab เรียก `python src/notify.py --session morning`
