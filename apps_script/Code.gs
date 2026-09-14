@@ -56,6 +56,17 @@ function _toISO(raw) {
 }
 function _pad(n) { n = String(n); return n.length === 1 ? '0' + n : n; }
 
+// Google Sheets sometimes auto-converts a plain "09:00" string into a real
+// Date/Time cell (epoch 1899-12-30, the Sheets/Excel date-zero). If that
+// happens, JS's default Date.toString() would leak the epoch date
+// ("Sat Dec 30 1899 09:00:00 GMT..."). Format it back to a plain HH:mm.
+function _formatTime(raw) {
+  if (raw instanceof Date) {
+    return Utilities.formatDate(raw, 'Asia/Bangkok', 'HH:mm');
+  }
+  return String(raw || '').trim();
+}
+
 function _readRows() {
   var sh = _sheet();
   var values = sh.getDataRange().getValues();
@@ -70,7 +81,7 @@ function _readRows() {
       date: map.date != null ? _toISO(row[map.date]) : '',
       name: map.name != null ? String(row[map.name]).trim() : '',
       task: map.task != null ? String(row[map.task]).trim() : '',
-      time: map.time != null ? String(row[map.time]).trim() : '',
+      time: map.time != null ? _formatTime(row[map.time]) : '',
       place: map.place != null ? String(row[map.place]).trim() : '',
       note: map.note != null ? String(row[map.note]).trim() : '',
     });
@@ -175,7 +186,17 @@ function _add(body) {
   };
   Object.keys(vals).forEach(function (k) { if (map[k] != null) out[map[k]] = vals[k]; });
   sh.appendRow(out);
-  return { ok: true, row: sh.getLastRow() };
+  var newRow = sh.getLastRow();
+
+  // Force the time cell to plain text so Sheets stops auto-converting
+  // "09:00"-looking strings into a real Date/Time value (see _formatTime).
+  if (map.time != null && vals.time) {
+    var timeCell = sh.getRange(newRow, map.time + 1);
+    timeCell.setNumberFormat('@');
+    timeCell.setValue(vals.time);
+  }
+
+  return { ok: true, row: newRow };
 }
 
 function _delete(body) {
