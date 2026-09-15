@@ -3,12 +3,19 @@
 GitHub Actions รัน `src/notify.py` → อ่านตารางงานจาก Google Sheet → ส่งข้อความสรุปเข้ากลุ่ม LINE
 ผ่าน Messaging API วันละ 2 รอบ:
 
-- **08:00 น. (เช้า)** — สรุปภารกิจตั้งแต่วันนี้เป็นต้นไป (วันนี้ + วันถัดไปทั้งหมด) **ส่งทุกวัน** แม้ไม่มีงาน
-- **11:30 น. (เที่ยง)** — เตือนเฉพาะภารกิจ**ช่วงบ่ายของวันนี้** (เวลา ≥ 12:00) **ถ้าไม่มีภารกิจบ่าย จะไม่ส่งข้อความเลย**
+- **08:00 น. (เช้า)** — สรุปภารกิจตั้งแต่วันนี้เป็นต้นไป (วันนี้ + วันถัดไปทั้งหมด) — วันไหนไม่มีงานเลยจะไม่ส่งข้อความ
+- **11:30 น. (เที่ยง)** — เตือนเฉพาะภารกิจ**ช่วงบ่ายของวันนี้** (เวลา ≥ 12:00) — ถ้าไม่มีภารกิจบ่าย จะไม่ส่งข้อความเลย
 
 ```
-Google Sheet  ──►  GitHub Actions (cron 01:00 & 04:30 UTC = 08:00 & 11:30 ไทย)  ──►  LINE push  ──►  กลุ่ม
+Google Sheet ──► GitHub Actions (workflow_dispatch) ──► LINE push ──► กลุ่ม
+                        ▲
+             cron-job.org (ฟรี) ยิงตรงเวลา 08:00 / 11:30 ไทย
 ```
+
+> ⚠️ **ทำไมไม่ใช้ `schedule:` ของ GitHub Actions เอง** — ลองแล้วพบว่า cron ของ GitHub
+> ดีเลย์ 4-5+ ชั่วโมงทุกวันบน repo นี้ (มากกว่าที่เอกสารบอกไว้ 5-15 นาทีมาก) จึงย้ายไปให้
+> [cron-job.org](https://cron-job.org) (ฟรี) ยิง `workflow_dispatch` ผ่าน GitHub REST API
+> ตรงเวลาแทน — ดูวิธีตั้งค่าที่หัวข้อ "ตั้งเวลาด้วย cron-job.org" ด้านล่าง
 
 ## 1. เตรียม Google Sheet
 1. สร้าง Sheet ใหม่ ตั้งชื่อแท็บว่า `schedule`
@@ -69,10 +76,28 @@ python src/notify.py --date 2026-09-11 --dry-run
 > ⚠️ ความปลอดภัย: หน้านี้เปิดให้ทุกคนที่มีลิงก์กรอก/ลบได้ (ไม่มีรหัส) หากต้องการจำกัด
 > ให้ตั้ง `PASSCODE` ทั้งใน `apps_script/Code.gs` และ `web/index.html`
 
+## ตั้งเวลาด้วย cron-job.org
+GitHub Actions `schedule:` ของ repo นี้ดีเลย์หลายชั่วโมง (ดูคำอธิบายด้านบน) จึงใช้
+[cron-job.org](https://cron-job.org) (ฟรี) ยิง `workflow_dispatch` ตรงเวลาแทน:
+
+1. สร้าง **GitHub fine-grained Personal Access Token**: Settings ของบัญชี GitHub →
+   Developer settings → Personal access tokens → Fine-grained tokens → New token
+   - Repository access: เลือก repo นี้เท่านั้น
+   - Permissions → Repository permissions → **Actions: Read and write**
+   - คัดลอก token (`github_pat_...`) เก็บไว้ — ดูซ้ำไม่ได้ ถ้าลืมต้องสร้างใหม่
+2. สมัคร cron-job.org ฟรี → **Create cronjob** 2 อัน (เช้า/บ่าย):
+   - URL: `https://api.github.com/repos/<user>/<repo>/actions/workflows/daily-notify.yml/dispatches`
+   - Method: `POST`
+   - Schedule: 08:00 และ 11:30 ตามลำดับ — **ตั้ง Timezone = Asia/Bangkok**
+   - Headers: `Authorization: Bearer <PAT>`, `Accept: application/vnd.github+json`,
+     `Content-Type: application/json`
+   - Body: `{"ref":"main","inputs":{"session":"morning"}}` (อีกอันเปลี่ยนเป็น `"afternoon"`)
+3. เช็คผลได้ที่ repo → Actions → filter Event = `workflow_dispatch`
+
 ## ปรับแต่ง
 - ค่าเริ่มต้น (รอบเช้า) คือ `SEND_WHEN_EMPTY=0` — วันไหนไม่มีงานเลย (เช่น เสาร์-อาทิตย์) จะไม่ส่งข้อความเลย
   ถ้าอยากให้ส่งข้อความ "ไม่มีกำหนดการ" ทุกวันแทน ให้แก้ `env` ใน `.github/workflows/daily-notify.yml` เป็น `SEND_WHEN_EMPTY: "1"`
 - รอบบ่ายถือว่า "บ่าย" ตั้งแต่ชั่วโมงไหน: แก้ `AFTERNOON_CUTOFF_HOUR` ใน `src/notify.py` (ค่าเริ่มต้น 12)
-- เปลี่ยนเวลาส่ง: แก้ `cron` ใน `.github/workflows/daily-notify.yml` (เป็น UTC — ไทยลบ 7)
-- GitHub cron ดีเลย์ได้ 5–15 นาที ถ้าต้องเป๊ะให้ย้ายไป VPS + crontab เรียก `python src/notify.py --session morning`
-  และ `python src/notify.py --session afternoon` ตามเวลาที่ต้องการ
+- เปลี่ยนเวลาส่ง: แก้เวลาใน cronjob ทั้ง 2 อันที่ cron-job.org (ไม่ต้องแก้โค้ด/workflow)
+- ทดสอบแบบไม่ส่งจริง: cron-job.org body เพิ่ม `"dry_run":"true"` ในระดับเดียวกับ `"session"`
+  ภายใน `inputs` ได้ เช่น `{"ref":"main","inputs":{"session":"morning","dry_run":"true"}}`

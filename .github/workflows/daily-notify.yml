@@ -1,13 +1,16 @@
 name: daily-notify
 
 on:
-  schedule:
-    # 01:00 UTC = 08:00 Asia/Bangkok — full announcement (today + upcoming days)
-    - cron: "0 1 * * *"
-    # 04:30 UTC = 11:30 Asia/Bangkok — afternoon-only reminder, skipped if none
-    - cron: "30 4 * * *"
-    # Note: GitHub cron may drift 5-15 min under load, and occasionally
-    # needs a fresh push to this file to re-register after repeated edits.
+  # No `schedule:` trigger here on purpose — GitHub Actions' own cron was
+  # observed drifting 4-5+ hours late every day on this repo (not the usual
+  # 5-15 min). Triggering is instead handled by an external scheduler
+  # (cron-job.org, free) that calls the GitHub REST API's "create a
+  # workflow dispatch event" endpoint on time:
+  #   POST https://api.github.com/repos/<owner>/<repo>/actions/workflows/daily-notify.yml/dispatches
+  #   body: {"ref":"main","inputs":{"session":"morning"}}   (or "afternoon")
+  #   headers: Authorization: Bearer <fine-grained PAT, Actions: read/write>
+  #            Accept: application/vnd.github+json
+  # See cron-job.org's "Next Runs" dashboard for the actual schedule times.
   workflow_dispatch:
     inputs:
       session:
@@ -32,13 +35,7 @@ jobs:
       - name: Pick session for this run
         id: pick
         run: |
-          if [ -n "${{ inputs.session }}" ]; then
-            echo "session=${{ inputs.session }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "30 4 * * *" ]; then
-            echo "session=afternoon" >> "$GITHUB_OUTPUT"
-          else
-            echo "session=morning" >> "$GITHUB_OUTPUT"
-          fi
+          echo "session=${{ inputs.session || 'morning' }}" >> "$GITHUB_OUTPUT"
       - name: Send announcement
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
