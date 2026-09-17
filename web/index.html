@@ -60,6 +60,39 @@
       <label class="chk"><input type="checkbox" id="showAll" /> ดูทั้งหมด (รวมที่ผ่านมาแล้ว)</label>
     </div>
     <div id="list" class="list">กำลังโหลด…</div>
+
+    <hr class="section-sep" />
+
+    <h2>📌 อย่าลืม / สิ่งที่ต้องปฏิบัติ</h2>
+    <p class="hint">งานที่ไม่ได้กำหนดวันที่/เวลา — ระบบจะเตือนซ้ำทุกเช้าจนกว่าจะติ๊กว่าเสร็จสิ้น</p>
+
+    <form id="todoForm">
+      <div class="field-block">
+        <span class="field-label">ผู้รับผิดชอบ *</span>
+        <div class="chk-group" id="todoNameChecks">
+          <label class="chk-item"><input type="checkbox" value="ทุกคน" data-all /> ทุกคน</label>
+          <label class="chk-item"><input type="checkbox" value="อ.วิชัย" /> อ.วิชัย</label>
+          <label class="chk-item"><input type="checkbox" value="อ.รุ่งนภา" /> อ.รุ่งนภา</label>
+          <label class="chk-item"><input type="checkbox" value="อ.ศักดิ์สิทธิ์" /> อ.ศักดิ์สิทธิ์</label>
+          <label class="chk-item"><input type="checkbox" value="อ.อุสาห์" /> อ.อุสาห์</label>
+          <label class="chk-item"><input type="checkbox" value="อ.ปรีชา" /> อ.ปรีชา</label>
+          <label class="chk-item"><input type="checkbox" value="อ.ณัฐพล" /> อ.ณัฐพล</label>
+          <label class="chk-item"><input type="checkbox" value="อ.รุจิรา" /> อ.รุจิรา</label>
+          <label class="chk-item"><input type="checkbox" value="อ.กฤชรัช" /> อ.กฤชรัช</label>
+          <label class="chk-item"><input type="checkbox" value="อ.ณัฏฐวัสน์" /> อ.ณัฏฐวัสน์</label>
+          <label class="chk-item"><input type="checkbox" value="น้องต้นกล้า" /> น้องต้นกล้า</label>
+        </div>
+      </div>
+
+      <div class="grid">
+        <label class="wide">รายการ *<input type="text" name="task" required placeholder="เช่น ส่งเอกสารงบประมาณ" /></label>
+        <label class="wide">หมายเหตุ<input type="text" name="note" /></label>
+      </div>
+      <button type="submit" id="todoSubmitBtn">เพิ่มรายการ</button>
+      <span id="todoMsg" class="msg"></span>
+    </form>
+
+    <div id="todoList" class="list">กำลังโหลด…</div>
   </main>
 
   <script>
@@ -75,9 +108,29 @@
     const showAll = $("#showAll");
     const placeSelect = $("#placeSelect");
     const placeOther = $("#placeOther");
-    const nameBoxes = [...document.querySelectorAll("#nameChecks input[type=checkbox]")];
-    const allBox = nameBoxes.find((b) => b.dataset.all !== undefined);
-    const personBoxes = nameBoxes.filter((b) => b !== allBox);
+
+    const todoForm = $("#todoForm");
+    const todoMsg = $("#todoMsg");
+    const todoListEl = $("#todoList");
+
+    // ── กลุ่ม checkbox ชื่อ: ใช้ซ้ำได้ทั้งฟอร์มตารางงานและฟอร์มอย่าลืม ──
+    // เลือก "ทุกคน" แล้วปิดการเลือกทีละคน, getSelected() คืนชื่อที่เลือกรวมกัน
+    function wireNameChecks(containerId) {
+      const boxes = [...document.querySelectorAll(`#${containerId} input[type=checkbox]`)];
+      const allBox = boxes.find((b) => b.dataset.all !== undefined);
+      const personBoxes = boxes.filter((b) => b !== allBox);
+      allBox.onchange = () => {
+        personBoxes.forEach((b) => {
+          b.disabled = allBox.checked;
+          if (allBox.checked) b.checked = false;
+        });
+      };
+      return {
+        getSelected: () => (allBox.checked ? ["ทุกคน"] : personBoxes.filter((b) => b.checked).map((b) => b.value)),
+      };
+    }
+    const nameChecks = wireNameChecks("nameChecks");
+    const todoNameChecks = wireNameChecks("todoNameChecks");
 
     const TH_MONTHS = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
     const TH_DOW = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
@@ -92,14 +145,6 @@
       const bkk = new Date(n.getTime() + (n.getTimezoneOffset() + 420) * 60000);
       return bkk.toISOString().slice(0, 10);
     }
-
-    // ── ทุกคน ⇄ รายชื่อทีละคน: เลือก "ทุกคน" แล้วปิดการเลือกทีละคน ──
-    allBox.onchange = () => {
-      personBoxes.forEach((b) => {
-        b.disabled = allBox.checked;
-        if (allBox.checked) b.checked = false;
-      });
-    };
 
     // ── ภารกิจ: เลือกข้อความคำร่างทั้งหมดตอนโฟกัส พิมพ์ทับได้ทันที ──
     form.querySelector('[name=task]').addEventListener("focus", (e) => e.target.select());
@@ -185,7 +230,7 @@
       ev.preventDefault();
       msg.textContent = ""; msg.className = "msg";
 
-      const chosenNames = allBox.checked ? ["ทุกคน"] : personBoxes.filter((b) => b.checked).map((b) => b.value);
+      const chosenNames = nameChecks.getSelected();
       if (!chosenNames.length) {
         msg.textContent = "✗ กรุณาเลือกชื่ออย่างน้อย 1 คน"; msg.className = "msg err";
         return;
@@ -213,10 +258,82 @@
 
     showAll.onchange = load;
     form.querySelector('[name=date]').value = todayISO();
+
+    // ── หัวข้อ "อย่าลืม / สิ่งที่ต้องปฏิบัติ" ──
+    function renderTodos(todos) {
+      if (!todos.length) { todoListEl.innerHTML = '<p class="empty">ไม่มีรายการค้าง 🎉</p>'; return; }
+      todoListEl.innerHTML = `<ul>${todos.map((t) => `
+        <li class="todo-item">
+          <label class="chk-item">
+            <input type="checkbox" class="todo-done" data-row="${t.row}" />
+            <span>
+              <span class="it-name">${escape_(t.name)}</span>
+              <div class="it-task">${escape_(t.task)}</div>
+              ${t.note ? `<div class="it-note">• ${escape_(t.note)}</div>` : ""}
+            </span>
+          </label>
+        </li>`).join("")}</ul>`;
+      todoListEl.querySelectorAll(".todo-done").forEach((cb) => cb.onchange = () => toggleTodo(cb));
+    }
+
+    async function loadTodos() {
+      todoListEl.textContent = "กำลังโหลด…";
+      try {
+        const data = await api("GET", { type: "todos" });
+        renderTodos(data.todos);
+      } catch (e) {
+        todoListEl.innerHTML = `<p class="err">โหลดไม่สำเร็จ: ${escape_(e.message)}</p>`;
+      }
+    }
+
+    async function toggleTodo(checkboxEl) {
+      const row = checkboxEl.dataset.row;
+      checkboxEl.disabled = true;
+      try {
+        await api("POST", null, { action: "toggleTodo", row: Number(row), done: true });
+        // ติ๊กแล้วถือว่าเสร็จสิ้น หายจากลิสต์ทันที ไม่ต้องรอ reload
+        checkboxEl.closest(".todo-item").remove();
+        if (!todoListEl.querySelector(".todo-item")) renderTodos([]);
+      } catch (e) {
+        alert("อัปเดตไม่สำเร็จ: " + e.message);
+        checkboxEl.checked = false;
+        checkboxEl.disabled = false;
+      }
+    }
+
+    todoForm.onsubmit = async (ev) => {
+      ev.preventDefault();
+      todoMsg.textContent = ""; todoMsg.className = "msg";
+
+      const chosenNames = todoNameChecks.getSelected();
+      if (!chosenNames.length) {
+        todoMsg.textContent = "✗ กรุณาเลือกผู้รับผิดชอบอย่างน้อย 1 คน"; todoMsg.className = "msg err";
+        return;
+      }
+
+      const fd = Object.fromEntries(new FormData(todoForm).entries());
+      fd.name = chosenNames.join(", ");
+
+      $("#todoSubmitBtn").disabled = true;
+      try {
+        await api("POST", null, Object.assign({ action: "addTodo" }, fd));
+        todoMsg.textContent = "✓ บันทึกแล้ว"; todoMsg.className = "msg ok";
+        todoForm.querySelector('[name=task]').value = "";
+        todoForm.querySelector('[name=note]').value = "";
+        loadTodos();
+      } catch (e) {
+        todoMsg.textContent = "✗ " + e.message; todoMsg.className = "msg err";
+      } finally {
+        $("#todoSubmitBtn").disabled = false;
+      }
+    };
+
     if (APPS_SCRIPT_URL.startsWith("PASTE_")) {
       listEl.innerHTML = '<p class="err">ยังไม่ได้ตั้งค่า APPS_SCRIPT_URL ในไฟล์ index.html</p>';
+      todoListEl.innerHTML = '<p class="err">ยังไม่ได้ตั้งค่า APPS_SCRIPT_URL ในไฟล์ index.html</p>';
     } else {
       load();
+      loadTodos();
     }
   </script>
 </body>

@@ -6,11 +6,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from notify import (  # noqa: E402
     afternoon_rows,
+    append_section,
     format_afternoon_message,
     format_message,
+    format_todos_section,
+    pending_todos,
     rows_for_day,
     rows_from_day,
     thai_date,
+    todos_only_message,
 )
 
 
@@ -98,3 +102,49 @@ def test_format_afternoon_message_lists_items():
     assert "เตือนภารกิจช่วงบ่าย" in msg
     assert "ตรวจงานบ่าย" in msg
     assert "ประชุมเช้า" not in msg
+
+
+TODO_ROWS = [
+    {"รายการ": "ส่งเอกสารงบประมาณ", "ผู้รับผิดชอบ": "อ.ปรีชา", "เสร็จสิ้น": False, "หมายเหตุ": ""},
+    {"รายการ": "ติดตามเรื่อง X", "ผู้รับผิดชอบ": "อ.วิชัย", "เสร็จสิ้น": True, "หมายเหตุ": ""},
+    {"รายการ": "เคลียร์ของเก่า", "ผู้รับผิดชอบ": "อ.รุ่งนภา", "เสร็จสิ้น": "TRUE", "หมายเหตุ": ""},
+    {"รายการ": "อัปเดตทะเบียน", "ผู้รับผิดชอบ": "อ.ณัฐพล", "เสร็จสิ้น": "", "หมายเหตุ": "รอเอกสารจากฝ่ายบุคคล"},
+]
+
+
+def test_pending_todos_filters_done_regardless_of_bool_or_string():
+    pending = pending_todos(TODO_ROWS)
+    assert [t["รายการ"] for t in pending] == ["ส่งเอกสารงบประมาณ", "อัปเดตทะเบียน"]
+
+
+def test_format_todos_section_empty_when_all_done():
+    all_done = [row for row in TODO_ROWS if row["รายการ"] != "ส่งเอกสารงบประมาณ" and row["รายการ"] != "อัปเดตทะเบียน"]
+    assert format_todos_section(all_done) == []
+
+
+def test_format_todos_section_lists_pending_with_note():
+    lines = format_todos_section(TODO_ROWS)
+    text = "\n".join(lines)
+    assert "อย่าลืม" in text
+    assert "อ.ปรีชา — ส่งเอกสารงบประมาณ" in text
+    assert "รอเอกสารจากฝ่ายบุคคล" in text
+    assert "ติดตามเรื่อง X" not in text  # done -> excluded
+
+
+def test_append_section_inserts_before_footer():
+    base = format_message(rows_from_day(ROWS, date(2026, 9, 11)), date(2026, 9, 11))
+    combined = append_section(base, format_todos_section(TODO_ROWS))
+    assert combined.endswith("— Bot แจ้งเตือน")
+    assert combined.index("อย่าลืม") > combined.index("📅 วันศุกร์ที่ 11 ก.ย. 69")
+    assert "ส่งเอกสารงบประมาณ" in combined
+
+
+def test_append_section_noop_when_no_todos():
+    base = format_message(rows_from_day(ROWS, date(2026, 9, 11)), date(2026, 9, 11))
+    assert append_section(base, []) == base
+
+
+def test_todos_only_message_when_nothing_scheduled():
+    msg = todos_only_message(date(2026, 9, 11), format_todos_section(TODO_ROWS))
+    assert "ส่งเอกสารงบประมาณ" in msg
+    assert msg.endswith("— Bot แจ้งเตือน")

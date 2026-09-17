@@ -10,6 +10,7 @@ Env vars:
   GOOGLE_SA_JSON             service-account key JSON (raw string)
   SHEET_ID                   spreadsheet id
   SHEET_WORKSHEET            worksheet/tab name (default: schedule)
+  TODO_WORKSHEET             undated "อย่าลืม" items worksheet/tab (default: todos)
   SEND_WHEN_EMPTY            "1" to still send a message when nothing scheduled (default: 1)
 """
 from __future__ import annotations
@@ -41,18 +42,67 @@ _COLS = {
     "note": ["หมายเหตุ", "note", "remark"],
 }
 
+# Same idea for the undated "อย่าลืม" (todo) sheet tab
+_TODO_COLS = {
+    "task": ["รายการ", "ภารกิจ", "task"],
+    "name": ["ผู้รับผิดชอบ", "ชื่อ-สกุล", "ชื่อ", "name"],
+    "done": ["เสร็จสิ้น", "done", "สถานะ"],
+    "note": ["หมายเหตุ", "note"],
+}
+
 
 def thai_date(d: date) -> str:
     yy = (d.year + 543) % 100  # 2-digit Buddhist year, e.g. 2026 -> 69
     return f"วัน{_TH_WEEKDAYS[d.weekday()]}ที่ {d.day} {_TH_MONTHS[d.month]} {yy:02d}"
 
 
-def _get(row: dict[str, Any], key: str) -> str:
-    for header in _COLS[key]:
+def _lookup_raw(row: dict[str, Any], key: str, cols: dict[str, list[str]]) -> Any:
+    for header in cols[key]:
         for k, v in row.items():
             if str(k).strip().lower() == header.lower():
-                return str(v).strip()
-    return ""
+                return v
+    return None
+
+
+def _get(row: dict[str, Any], key: str, cols: dict[str, list[str]] = _COLS) -> str:
+    raw = _lookup_raw(row, key, cols)
+    return "" if raw is None else str(raw).strip()
+
+
+def _todo_get(row: dict[str, Any], key: str) -> str:
+    return _get(row, key, _TODO_COLS)
+
+
+def _is_done(row: dict[str, Any]) -> bool:
+    """A todo's "เสร็จสิ้น" cell: a real Sheets checkbox comes back as a bool
+    via gspread; a hand-typed cell might just be text like "TRUE"/"ติ๊ก"."""
+    raw = _lookup_raw(row, "done", _TODO_COLS)
+    if isinstance(raw, bool):
+        return raw
+    return str(raw or "").strip().lower() in ("true", "1", "✓", "เสร็จ", "yes")
+
+
+def pending_todos(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if not _is_done(row)]
+
+
+def format_todos_section(rows: Iterable[dict[str, Any]]) -> list[str]:
+    """Lines for the "อย่าลืม" block: a title line followed by one numbered
+    line per pending item. Returns [] (no title either) when nothing is
+    pending, so callers can skip the section entirely rather than print an
+    empty heading."""
+    pending = pending_todos(rows)
+    if not pending:
+        return []
+    lines = ["📌 อย่าลืม / สิ่งที่ต้องปฏิบัติ"]
+    for i, row in enumerate(pending, start=1):
+        name = _todo_get(row, "name")
+        task = _todo_get(row, "task")
+        note = _todo_get(row, "note")
+        lines.append(f"{i}) {name or '(ไม่ระบุผู้รับผิดชอบ)'} — {task or '(ไม่ระบุรายการ)'}")
+        if note:
+            lines.append(f"   - {note}")
+    return lines
 
 
 def _parse_date(raw: str) -> date | None:
@@ -179,6 +229,31 @@ def format_message(rows: list[dict[str, Any]], target: date, send_when_empty: bo
     return "\n".join(lines)
 
 
+_FOOTER = "— Bot แจ้งเตือน"
+
+
+def append_section(message: str, section_lines: list[str]) -> str:
+    """Insert an extra block (e.g. the todos section) just before the
+    footer of an already-formatted message. No-op if there's nothing to
+    add, so callers can call this unconditionally."""
+    if not section_lines:
+        return message
+    lines = message.split("\n")
+    if lines and lines[-1] == _FOOTER:
+        lines = lines[:-1]
+    lines.extend(section_lines)
+    lines.append("")
+    lines.append(_FOOTER)
+    return "\n".join(lines)
+
+
+def todos_only_message(target: date, section_lines: list[str]) -> str:
+    """Standalone message for when the schedule has nothing to say but
+    there are still pending "อย่าลืม" items to remind about."""
+    header = f"📢 แจ้งเตือนประจำ{thai_date(target)}"
+    return "\n".join([header, "", *section_lines, "", _FOOTER])
+
+
 def _env(name: str, default: str | None = None, required: bool = False) -> str:
     val = os.environ.get(name, default)
     if required and not val:
@@ -234,10 +309,28 @@ def main() -> int:
     else:
         selected = rows_from_day(rows, target)
         message = format_message(selected, target, send_when_empty)
-        if message is None:
-            print("Nothing scheduled and SEND_WHEN_EMPTY=0 — not sending.")
+
+        todos_lines: list[str] = []
+        try:
+            todo_rows = fetch_rows(
+                _env("GOOGLE_SA_JSON", required=True),
+                _env("SHEET_ID", required=True),
+                _env("TODO_WORKSHEET", "todos"),
+            )
+            todos_lines = format_todos_section(todo_rows)
+            if args.debug:
+                pending = pending_todos(todo_rows)
+                print(f"อ่านได้ {len(todo_rows)} แถวจากแท็บ '{_env('TODO_WORKSHEET', 'todos')}' "
+                      f"({len(pending)} รายการยังไม่เสร็จ)")
+        except Exception as exc:  # e.g. the "todos" tab doesn't exist yet
+            if args.debug:
+                print(f"อ่านแท็บ 'อย่าลืม' ไม่ได้ (ข้ามส่วนนี้): {exc}")
+
+        if message is None and not todos_lines:
+            print("Nothing scheduled/pending and SEND_WHEN_EMPTY=0 — not sending.")
             return 0
-        label = f"item(s) from {target} onward"
+        message = todos_only_message(target, todos_lines) if message is None else append_section(message, todos_lines)
+        label = f"item(s) from {target} onward (+ {len(pending_todos(todo_rows))} todo(s))" if todos_lines else f"item(s) from {target} onward"
 
     if args.dry_run:
         print(message)

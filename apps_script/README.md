@@ -3,7 +3,8 @@
 หน้าเว็บ `web/index.html` คุยกับ Google Sheet ผ่าน Apps Script ตัวนี้ ไม่ต้องมี server
 
 ## ขั้นตอน
-1. เปิด Google Sheet ที่ใช้เก็บตาราง (แท็บชื่อ `schedule`)
+1. เปิด Google Sheet ที่ใช้เก็บตาราง — ต้องมี 2 แท็บ: `schedule` (ตารางงาน) และ `todos`
+   (หัวข้อ "อย่าลืม / สิ่งที่ต้องปฏิบัติ" — ดูรูปแบบคอลัมน์ใน [README.md](../README.md) หัวข้อ 1)
 2. เมนู **Extensions → Apps Script**
 3. ลบโค้ดเดิมในไฟล์ `Code.gs` แล้ววางเนื้อหาจาก [`Code.gs`](Code.gs) ทั้งหมด
 4. กด **Save** (ไอคอนแผ่นดิสก์)
