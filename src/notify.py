@@ -269,8 +269,10 @@ def main() -> int:
     ap.add_argument("--debug", action="store_true", help="dump every row read from the sheet")
     ap.add_argument(
         "--session", choices=["morning", "afternoon"], default="morning",
-        help="morning: today + upcoming days (always sends). "
-             "afternoon: today's afternoon items only, skipped entirely if none.",
+        help="morning: today + upcoming days. "
+             "afternoon: today's afternoon items only. "
+             "Both sessions also append the 'อย่าลืม' todos section; skipped "
+             "entirely only if both the schedule part and the todos are empty.",
     )
     args = ap.parse_args()
 
@@ -299,38 +301,44 @@ def main() -> int:
                 print(f"      หัวคอลัมน์ที่เจอ: {list(row.keys())}")
         print("-" * 40)
 
-    if args.session == "afternoon":
-        selected = afternoon_rows(rows, target)
-        message = format_afternoon_message(selected, target)
-        if message is None:
-            print("ไม่มีภารกิจช่วงบ่ายวันนี้ — ข้ามรอบนี้ ไม่ส่ง")
-            return 0
-        label = f"afternoon item(s) for {target}"
-    else:
-        selected = rows_from_day(rows, target)
-        message = format_message(selected, target, send_when_empty)
-
-        todos_lines: list[str] = []
+    def _fetch_todos_lines() -> list[str]:
         try:
             todo_rows = fetch_rows(
                 _env("GOOGLE_SA_JSON", required=True),
                 _env("SHEET_ID", required=True),
                 _env("TODO_WORKSHEET", "todos"),
             )
-            todos_lines = format_todos_section(todo_rows)
+            lines = format_todos_section(todo_rows)
             if args.debug:
                 pending = pending_todos(todo_rows)
                 print(f"อ่านได้ {len(todo_rows)} แถวจากแท็บ '{_env('TODO_WORKSHEET', 'todos')}' "
                       f"({len(pending)} รายการยังไม่เสร็จ)")
+            return lines
         except Exception as exc:  # e.g. the "todos" tab doesn't exist yet
             if args.debug:
                 print(f"อ่านแท็บ 'อย่าลืม' ไม่ได้ (ข้ามส่วนนี้): {exc}")
+            return []
+
+    if args.session == "afternoon":
+        selected = afternoon_rows(rows, target)
+        message = format_afternoon_message(selected, target)
+        todos_lines = _fetch_todos_lines()
+
+        if message is None and not todos_lines:
+            print("ไม่มีภารกิจช่วงบ่ายวันนี้และไม่มี 'อย่าลืม' ค้าง — ข้ามรอบนี้ ไม่ส่ง")
+            return 0
+        message = todos_only_message(target, todos_lines) if message is None else append_section(message, todos_lines)
+        label = f"afternoon item(s) for {target}" + (" (+ todo(s))" if todos_lines else "")
+    else:
+        selected = rows_from_day(rows, target)
+        message = format_message(selected, target, send_when_empty)
+        todos_lines = _fetch_todos_lines()
 
         if message is None and not todos_lines:
             print("Nothing scheduled/pending and SEND_WHEN_EMPTY=0 — not sending.")
             return 0
         message = todos_only_message(target, todos_lines) if message is None else append_section(message, todos_lines)
-        label = f"item(s) from {target} onward (+ {len(pending_todos(todo_rows))} todo(s))" if todos_lines else f"item(s) from {target} onward"
+        label = f"item(s) from {target} onward" + (" (+ todo(s))" if todos_lines else "")
 
     if args.dry_run:
         print(message)
