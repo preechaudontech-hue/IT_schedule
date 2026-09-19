@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from notify import (  # noqa: E402
     afternoon_rows,
     append_section,
+    compose_or_skip,
     format_afternoon_message,
     format_message,
     format_todos_section,
@@ -148,3 +149,34 @@ def test_todos_only_message_when_nothing_scheduled():
     msg = todos_only_message(date(2026, 9, 11), format_todos_section(TODO_ROWS))
     assert "ส่งเอกสารงบประมาณ" in msg
     assert msg.endswith("— Bot แจ้งเตือน")
+
+
+# 2026-09-19 = Saturday, 2026-09-20 = Sunday, 2026-09-21 = Monday
+SATURDAY = date(2026, 9, 19)
+SUNDAY = date(2026, 9, 20)
+MONDAY = date(2026, 9, 21)
+TODOS = format_todos_section(TODO_ROWS)
+
+
+def test_compose_or_skip_sends_when_schedule_has_content_any_day():
+    scheduled = format_message(rows_from_day(ROWS, date(2026, 9, 11)), date(2026, 9, 11))
+    for day, is_weekend in [(MONDAY, False), (SATURDAY, True), (SUNDAY, True)]:
+        out = compose_or_skip(scheduled, TODOS, day, is_weekend)
+        assert out is not None
+        assert "ส่งเอกสารงบประมาณ" in out  # todos still appended
+
+
+def test_compose_or_skip_weekday_with_only_todos_still_sends():
+    out = compose_or_skip(None, TODOS, MONDAY, is_weekend=False)
+    assert out is not None
+    assert "ส่งเอกสารงบประมาณ" in out
+
+
+def test_compose_or_skip_weekend_with_only_todos_is_skipped():
+    for day in (SATURDAY, SUNDAY):
+        assert compose_or_skip(None, TODOS, day, is_weekend=True) is None
+
+
+def test_compose_or_skip_nothing_at_all_is_skipped_any_day():
+    for day, is_weekend in [(MONDAY, False), (SATURDAY, True)]:
+        assert compose_or_skip(None, [], day, is_weekend) is None

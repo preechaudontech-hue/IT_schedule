@@ -254,6 +254,28 @@ def todos_only_message(target: date, section_lines: list[str]) -> str:
     return "\n".join([header, "", *section_lines, "", _FOOTER])
 
 
+def compose_or_skip(
+    message: str | None, todos_lines: list[str], target: date, is_weekend: bool
+) -> str | None:
+    """Combine a schedule message with the todos section, or decide the
+    run should send nothing at all.
+
+    - schedule has content (`message` is not None): always send, with the
+      todos section appended (if any).
+    - schedule is empty and it's a weekend: never send just for pending
+      "อย่าลืม" items — those keep waiting quietly until a working day.
+    - schedule is empty on a weekday: send a todos-only message if there
+      are any pending, otherwise nothing.
+    """
+    if message is not None:
+        return append_section(message, todos_lines)
+    if is_weekend:
+        return None
+    if not todos_lines:
+        return None
+    return todos_only_message(target, todos_lines)
+
+
 def _env(name: str, default: str | None = None, required: bool = False) -> str:
     val = os.environ.get(name, default)
     if required and not val:
@@ -319,25 +341,31 @@ def main() -> int:
                 print(f"อ่านแท็บ 'อย่าลืม' ไม่ได้ (ข้ามส่วนนี้): {exc}")
             return []
 
+    is_weekend = target.weekday() >= 5  # Saturday=5, Sunday=6
+
     if args.session == "afternoon":
         selected = afternoon_rows(rows, target)
-        message = format_afternoon_message(selected, target)
+        schedule_message = format_afternoon_message(selected, target)
         todos_lines = _fetch_todos_lines()
+        message = compose_or_skip(schedule_message, todos_lines, target, is_weekend)
 
-        if message is None and not todos_lines:
-            print("ไม่มีภารกิจช่วงบ่ายวันนี้และไม่มี 'อย่าลืม' ค้าง — ข้ามรอบนี้ ไม่ส่ง")
+        if message is None:
+            reason = "เสาร์-อาทิตย์และไม่มีภารกิจ — ข้าม แม้มี 'อย่าลืม' ค้างอยู่ก็ตาม" if is_weekend and todos_lines \
+                else "ไม่มีภารกิจช่วงบ่ายวันนี้และไม่มี 'อย่าลืม' ค้าง — ข้ามรอบนี้ ไม่ส่ง"
+            print(reason)
             return 0
-        message = todos_only_message(target, todos_lines) if message is None else append_section(message, todos_lines)
         label = f"afternoon item(s) for {target}" + (" (+ todo(s))" if todos_lines else "")
     else:
         selected = rows_from_day(rows, target)
-        message = format_message(selected, target, send_when_empty)
+        schedule_message = format_message(selected, target, send_when_empty)
         todos_lines = _fetch_todos_lines()
+        message = compose_or_skip(schedule_message, todos_lines, target, is_weekend)
 
-        if message is None and not todos_lines:
-            print("Nothing scheduled/pending and SEND_WHEN_EMPTY=0 — not sending.")
+        if message is None:
+            reason = "เสาร์-อาทิตย์และไม่มีงานในตาราง — ข้าม แม้มี 'อย่าลืม' ค้างอยู่ก็ตาม" if is_weekend and todos_lines \
+                else "Nothing scheduled/pending and SEND_WHEN_EMPTY=0 — not sending."
+            print(reason)
             return 0
-        message = todos_only_message(target, todos_lines) if message is None else append_section(message, todos_lines)
         label = f"item(s) from {target} onward" + (" (+ todo(s))" if todos_lines else "")
 
     if args.dry_run:
